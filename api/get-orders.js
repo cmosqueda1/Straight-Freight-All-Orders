@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 export default async function handler(req, res) {
   try {
     const { from, to } = req.query;
@@ -10,11 +8,10 @@ export default async function handler(req, res) {
       });
     }
 
-    // 🔎 Log so you can verify sequential ranges in Vercel logs
-    console.log(`GET-ORDERS invoked: ${from} → ${to}`);
+    console.log(`GET-ORDERS: ${from} → ${to}`);
 
     /* ======================================================
-       LOGIN (SAFE FOR VERCEL)
+       LOGIN (CALL LOCAL API SAFELY)
     ====================================================== */
 
     const loginUrl = `https://${req.headers.host}/api/login`;
@@ -35,15 +32,15 @@ export default async function handler(req, res) {
     const token = loginData.token;
 
     /* ======================================================
-       FETCH ORDERS (USE EXACT DATE RANGE PASSED IN)
+       FETCH ORDERS (EXACT DATE RANGE)
     ====================================================== */
 
-    const ordersApiUrl =
+    const ordersUrl =
       `https://straight-freight-api.example.com/orders` +
       `?from=${encodeURIComponent(from)}` +
       `&to=${encodeURIComponent(to)}`;
 
-    const ordersRes = await fetch(ordersApiUrl, {
+    const ordersRes = await fetch(ordersUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/json"
@@ -60,10 +57,6 @@ export default async function handler(req, res) {
     const orders = Array.isArray(ordersData)
       ? ordersData
       : ordersData?.orders || [];
-
-    /* ======================================================
-       SUCCESS RESPONSE
-    ====================================================== */
 
     return res.status(200).json({
       from,
