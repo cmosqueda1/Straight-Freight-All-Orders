@@ -3,158 +3,155 @@
 <head>
 <meta charset="UTF-8" />
 <title>Straight Freight – Orders Export</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 
 <style>
+:root{
+  --bg:#05070b;
+  --card:#0f1420;
+  --text:#e6edf6;
+  --muted:#93a4b7;
+  --accent:#7c3aed;
+  --accent2:#22d3ee;
+  --border:#1f2933;
+}
+
+*{box-sizing:border-box}
+
 body{
   margin:0;
   min-height:100vh;
-  background:radial-gradient(1200px 600px at 10% 0%, #0b1220, #020617);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto;
-  color:#e5e7eb;
+  background:radial-gradient(1200px 800px at 10% -10%, #121a2b 0%, transparent 60%), var(--bg);
+  color:var(--text);
+  font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;
   display:flex;
   align-items:center;
   justify-content:center;
 }
+
 .card{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:14px;
-  padding:24px;
-  width:460px;
-  box-shadow:0 30px 80px rgba(0,0,0,.55);
+  width:420px;
+  background:linear-gradient(180deg,#111827,#0b1220);
+  border:1px solid var(--border);
+  border-radius:18px;
+  padding:22px;
 }
-h2{margin:0 0 16px;font-size:20px}
-label{font-size:13px;color:#94a3b8}
+
+h1{
+  margin:0 0 16px;
+  font-size:20px;
+}
+
+label{
+  font-size:12px;
+  color:var(--muted);
+  display:block;
+  margin-top:12px;
+}
+
 input{
   width:100%;
-  margin:6px 0 14px;
-  padding:8px 10px;
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:8px;
-  color:#e5e7eb;
+  margin-top:6px;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:#0b1220;
+  color:var(--text);
 }
+
 button{
   width:100%;
-  padding:10px;
-  border-radius:10px;
+  margin-top:18px;
+  padding:12px;
+  border-radius:12px;
   border:none;
+  background:linear-gradient(90deg,var(--accent),var(--accent2));
+  color:#fff;
   font-weight:600;
   cursor:pointer;
-  margin-top:6px;
 }
-#startBtn{background:linear-gradient(135deg,#22d3ee,#7c3aed);color:#020617}
-#exportBtn{background:#1e293b;color:#e5e7eb;display:none}
-.progress{
-  height:10px;
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:999px;
-  margin-top:18px;
-  overflow:hidden;
+
+button:disabled{
+  opacity:.6;
+  cursor:not-allowed;
 }
-.bar{
-  height:100%;
-  width:0%;
-  background:linear-gradient(90deg,#22d3ee,#7c3aed);
-  transition:.3s;
-}
+
 .status{
-  margin-top:10px;
-  font-size:14px;
-  color:#cbd5f5;
+  margin-top:16px;
+  font-size:13px;
+  color:var(--muted);
 }
 </style>
 </head>
 
 <body>
 <div class="card">
-  <h2>Straight Freight – Orders Export</h2>
+  <h1>Straight Freight – Orders Export</h1>
 
   <label>Start Date</label>
-  <input type="date" id="start" value="2021-12-01">
+  <input type="date" id="startDate" />
 
   <label>End Date</label>
-  <input type="date" id="end" value="2025-12-17">
+  <input type="date" id="endDate" />
 
-  <button id="startBtn" onclick="runExport()">Start Pull</button>
+  <button id="startBtn">Start Pull</button>
 
-  <div class="progress"><div class="bar" id="bar"></div></div>
-  <div class="status" id="status">Waiting to start…</div>
-
-  <button id="exportBtn" onclick="exportCSV()">Export CSV</button>
+  <div class="status" id="status">Idle</div>
 </div>
 
 <script>
-let allOrders = [];
-let token = null;
+const btn = document.getElementById("startBtn");
+const statusEl = document.getElementById("status");
 
-function fmt(d){
-  return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${d.getFullYear()}`;
-}
+const addDays = (date, days) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
 
-async function runExport(){
-  allOrders = [];
-  document.getElementById("exportBtn").style.display="none";
-  document.getElementById("bar").style.width="0%";
+const fmt = (d) => d.toISOString().slice(0,10);
 
-  const startDate = new Date(document.getElementById("start").value);
-  const endDate   = new Date(document.getElementById("end").value);
+btn.onclick = async () => {
+  const startVal = document.getElementById("startDate").value;
+  const endVal = document.getElementById("endDate").value;
 
-  document.getElementById("status").textContent = "Logging in…";
-
-  const loginRes = await fetch("/api/login");
-  const loginJson = await loginRes.json();
-  token = loginJson.token;
-
-  let cur = new Date(startDate);
-  let totalWindows = Math.ceil((endDate - startDate) / (1000*60*60*24*30));
-  let windowIndex = 0;
-
-  while(cur <= endDate){
-    windowIndex++;
-
-    const chunkEnd = new Date(cur);
-    chunkEnd.setDate(chunkEnd.getDate() + 29);
-    if(chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
-
-    document.getElementById("status").textContent =
-      `Pulling ${fmt(cur)} → ${fmt(chunkEnd)} (Orders so far: ${allOrders.length})`;
-
-    const res = await fetch(
-      `/api/get-orders?from=${fmt(cur)}&to=${fmt(chunkEnd)}`,
-      { headers:{ Authorization:`Bearer ${token}` } }
-    );
-
-    const data = await res.json();
-    if(Array.isArray(data)) allOrders.push(...data);
-
-    document.getElementById("bar").style.width =
-      Math.min(windowIndex / totalWindows * 100, 100) + "%";
-
-    cur.setDate(chunkEnd.getDate() + 1);
-    await new Promise(r => setTimeout(r, 1200));
+  if (!startVal || !endVal) {
+    alert("Please select both dates.");
+    return;
   }
 
-  document.getElementById("status").textContent =
-    `Complete — ${allOrders.length} orders found`;
+  btn.disabled = true;
+  statusEl.textContent = "Starting…";
 
-  document.getElementById("exportBtn").style.display="block";
-}
+  let cursor = new Date(startVal);
+  const finalEnd = new Date(endVal);
 
-function exportCSV(){
-  if(!allOrders.length) return;
-  const headers = Object.keys(allOrders[0]);
-  const rows = allOrders.map(o =>
-    headers.map(h => JSON.stringify(o[h] ?? "")).join(",")
-  );
-  const csv = [headers.join(","), ...rows].join("\n");
-  const blob = new Blob([csv],{type:"text/csv"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "straight_freight_orders.csv";
-  a.click();
-}
+  let totalOrders = 0;
+
+  while (cursor <= finalEnd) {
+    const batchStart = new Date(cursor);
+    let batchEnd = addDays(batchStart, 29);
+    if (batchEnd > finalEnd) batchEnd = new Date(finalEnd);
+
+    const from = fmt(batchStart);
+    const to = fmt(batchEnd);
+
+    statusEl.textContent = `Pulling ${from} → ${to} (Orders so far: ${totalOrders})`;
+
+    const res = await fetch(`/api/get-orders?from=${from}&to=${to}`);
+    const data = await res.json();
+
+    if (Array.isArray(data.orders)) {
+      totalOrders += data.orders.length;
+    }
+
+    // advance cursor to NEXT DAY after batch end
+    cursor = addDays(batchEnd, 1);
+  }
+
+  statusEl.textContent = `Completed. Total Orders: ${totalOrders}`;
+  btn.disabled = false;
+};
 </script>
 </body>
 </html>
