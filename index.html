@@ -1,53 +1,68 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Straight Freight – Orders Export</title>
+<meta charset="utf-8">
+<title>Straight Freight – Orders Export</title>
+<style>
+body { font-family: system-ui; background:#0f172a; color:#e5e7eb; padding:30px }
+.card { background:#020617; padding:20px; max-width:520px; border-radius:12px }
+.progress { height:10px; background:#1e293b; border-radius:8px; overflow:hidden }
+.bar { height:100%; width:0%; background:#22d3ee; transition:.3s }
+.counter { font-size:18px; margin-top:10px }
+button { padding:10px 16px; margin-top:12px; cursor:pointer }
+</style>
 </head>
 <body>
 
-<h2>Straight Freight – Orders Export</h2>
+<div class="card">
+  <h2>Straight Freight – Orders Export</h2>
 
-<label>Start Date</label><br />
-<input type="date" id="start" value="2021-12-01"><br><br>
+  <label>Start Date</label><br>
+  <input type="date" id="start" value="2021-12-01"><br><br>
 
-<label>End Date</label><br />
-<input type="date" id="end" value="2025-12-17"><br><br>
+  <label>End Date</label><br>
+  <input type="date" id="end" value="2025-12-17"><br><br>
 
-<button onclick="run()">Fetch & Export CSV</button>
+  <button onclick="start()">Start Export</button>
 
-<pre id="log"></pre>
+  <div class="progress"><div class="bar" id="bar"></div></div>
+  <div class="counter" id="count">Orders pulled: 0</div>
+</div>
 
 <script>
-const log = msg => document.getElementById("log").textContent += msg + "\n";
+let jobId;
 
-async function run() {
-  log("Fetching orders...");
-  const start = document.getElementById("start").value;
-  const end = document.getElementById("end").value;
+async function start() {
+  const s = start.value, e = end.value;
+  const r = await fetch(`/api/start-job?startDate=${s}&endDate=${e}`);
+  jobId = (await r.json()).jobId;
+  poll();
+}
 
-  const res = await fetch(`/api/orders?startDate=${start}&endDate=${end}`);
-  const data = await res.json();
+async function poll() {
+  const r = await fetch(`/api/job-status?jobId=${jobId}`);
+  const j = await r.json();
 
-  log(`Orders received: ${data.length}`);
-  exportCSV(data);
+  count.textContent = `Orders pulled: ${j.count}`;
+  bar.style.width = Math.min(j.count / 5000 * 100, 100) + "%";
+
+  if (j.status === "running") {
+    setTimeout(poll, 1500);
+  } else {
+    const data = await fetch(`/api/job-result?jobId=${jobId}`).then(r=>r.json());
+    exportCSV(data);
+  }
 }
 
 function exportCSV(data) {
   const headers = Object.keys(data[0]);
-  const rows = data.map(o =>
-    headers.map(h => JSON.stringify(o[h] ?? "")).join(",")
-  );
-
+  const rows = data.map(o => headers.map(h => JSON.stringify(o[h]??"")).join(","));
   const csv = [headers.join(","), ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(new Blob([csv]));
   a.download = "straight_freight_orders.csv";
   a.click();
 }
 </script>
-
 </body>
 </html>
