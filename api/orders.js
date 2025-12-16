@@ -4,12 +4,14 @@ export default async function handler(req, res) {
 
     const BASE = "https://www.straightfreightsystems.com";
 
-    // ⚠️ HARD-CODED HERE AS REQUESTED (SERVER ONLY)
+    // HARDCODED (server-side only)
     const USERNAME = "UNIS";
     const PASSWORD = "Capital12345!";
     const CALLER_ID = "27";
 
-    // ---- LOGIN ----
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    /* ---------------- LOGIN ---------------- */
     const loginRes = await fetch(`${BASE}/Axis/Login`, {
       method: "POST",
       headers: {
@@ -31,7 +33,7 @@ export default async function handler(req, res) {
 
     const token = loginJson.access_token;
 
-    // ---- DATE LOOP (30 DAYS) ----
+    /* ---------------- DATE LOOP ---------------- */
     const results = [];
     let cur = new Date(startDate);
     const end = new Date(endDate);
@@ -53,16 +55,36 @@ export default async function handler(req, res) {
         }
       });
 
+      const contentType = ordersRes.headers.get("content-type") || "";
+
+      // 🔴 HANDLE RATE LIMIT / NON-JSON RESPONSES
+      if (!contentType.includes("application/json")) {
+        const text = await ordersRes.text();
+        console.warn(`Skipped ${from} → ${to}:`, text.slice(0, 80));
+
+        // wait longer if rate limited
+        await sleep(3000);
+        cur.setDate(chunkEnd.getDate() + 1);
+        continue;
+      }
+
       const data = await ordersRes.json();
       if (Array.isArray(data)) {
         results.push(...data);
       }
 
+      // ✅ REQUIRED: throttle between calls
+      await sleep(1200);
+
       cur.setDate(chunkEnd.getDate() + 1);
     }
 
     res.status(200).json(results);
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({
+      error: err.message,
+      hint: "Likely rate-limited; delays now added"
+    });
   }
 }
