@@ -1,42 +1,60 @@
 global.jobs ||= {};
 
 export default async function handler(req, res) {
-  const id = crypto.randomUUID();
+  const { startDate, endDate } = req.query;
 
-  global.jobs[id] = {
+  if (!startDate || !endDate) {
+    return res.status(400).json({
+      error: "startDate and endDate are required"
+    });
+  }
+
+  const jobId = crypto.randomUUID();
+
+  global.jobs[jobId] = {
     status: "running",
     count: 0,
     results: []
   };
 
-  // fire-and-forget async work
-  runJob(id, req.query.startDate, req.query.endDate);
-
-  res.json({ jobId: id });
+  runJob(jobId, startDate, endDate);
+  res.json({ jobId });
 }
 
-async function runJob(id, startDate, endDate) {
+async function runJob(jobId, startDate, endDate) {
   const BASE = "https://www.straightfreightsystems.com";
+
+  // ⚠️ HARDCODED AS REQUESTED (SERVER ONLY)
   const USERNAME = "UNIS";
   const PASSWORD = "Capital12345!";
   const CALLER_ID = "27";
+
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   try {
-    // LOGIN
-    const login = await fetch(`${BASE}/Axis/Login`, {
+    /* ---------- LOGIN ---------- */
+    const loginRes = await fetch(`${BASE}/Axis/Login`, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+      },
       body: new URLSearchParams({
         grant_type: "password",
         username: USERNAME,
         password: PASSWORD,
         callerid: CALLER_ID
       })
-    }).then(r => r.json());
+    });
 
-    const token = login.access_token;
+    const loginJson = await loginRes.json();
+    if (!loginJson.access_token) {
+      throw new Error("Login failed");
+    }
 
+    const token = loginJson.access_token;
+
+    /* ---------- DATE LOOP ---------- */
     let cur = new Date(startDate);
     const end = new Date(endDate);
 
@@ -45,30 +63,39 @@ async function runJob(id, startDate, endDate) {
       chunkEnd.setDate(chunkEnd.getDate() + 29);
       if (chunkEnd > end) chunkEnd.setTime(end.getTime());
 
-      const from = cur.toLocaleDateString("en-US");
-      const to = chunkEnd.toLocaleDateString("en-US");
+      const from = `${String(cur.getMonth()+1).padStart(2,"0")}/${String(cur.getDate()).padStart(2,"0")}/${cur.getFullYear()}`;
+      const to   = `${String(chunkEnd.getMonth()+1).padStart(2,"0")}/${String(chunkEnd.getDate()).padStart(2,"0")}/${chunkEnd.getFullYear()}`;
 
-      const res = await fetch(
-        `${BASE}/Axis/v3/Order/GetAllOrders?fromDate=${from}&toDate=${to}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const url = `${BASE}/Axis/v3/Order/GetAllOrders?fromDate=${from}&toDate=${to}`;
 
-      const type = res.headers.get("content-type") || "";
-      if (type.includes("application/json")) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          global.jobs[id].results.push(...data);
-          global.jobs[id].count = global.jobs[id].results.length;
+      const resp = await fetch(url, {
+        headers: {
+          "Accept": "application/json",
+          "Authorization": `Bearer ${token}`
         }
+      });
+
+      const contentType = resp.headers.get("content-type") || "";
+
+      if (contentType.includes("application/json")) {
+        const data = await resp.json();
+        if (Array.isArray(data)) {
+          global.jobs[jobId].results.push(...data);
+          global.jobs[jobId].count = global.jobs[jobId].results.length;
+        }
+      } else {
+        // rate limited / plain text response
+        await resp.text();
+        await sleep(3000);
       }
 
       await sleep(1200);
       cur.setDate(chunkEnd.getDate() + 1);
     }
 
-    global.jobs[id].status = "done";
-  } catch (e) {
-    global.jobs[id].status = "error";
-    global.jobs[id].error = e.message;
+    global.jobs[jobId].status = "done";
+  } catch (err) {
+    global.jobs[jobId].status = "error";
+    global.jobs[jobId].error = err.message;
   }
 }
