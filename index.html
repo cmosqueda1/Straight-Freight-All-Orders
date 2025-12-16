@@ -1,188 +1,160 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Straight Freight – Orders Export</title>
+<meta charset="UTF-8" />
+<title>Straight Freight – Orders Export</title>
 
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      background: radial-gradient(1200px 600px at 10% 0%, #0b1220, #020617);
-      color: #e5e7eb;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .card {
-      background: #020617;
-      border: 1px solid #1e293b;
-      border-radius: 14px;
-      padding: 24px 26px 26px;
-      width: 420px;
-      box-shadow: 0 30px 80px rgba(0,0,0,.55);
-    }
-
-    h2 {
-      margin: 0 0 18px 0;
-      font-size: 20px;
-      font-weight: 600;
-    }
-
-    label {
-      font-size: 13px;
-      color: #94a3b8;
-    }
-
-    input {
-      width: 100%;
-      margin: 6px 0 14px;
-      padding: 8px 10px;
-      background: #020617;
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-      color: #e5e7eb;
-    }
-
-    button {
-      width: 100%;
-      padding: 10px;
-      border-radius: 10px;
-      border: none;
-      background: linear-gradient(135deg, #22d3ee, #7c3aed);
-      color: #020617;
-      font-weight: 600;
-      cursor: pointer;
-      margin-top: 6px;
-    }
-
-    button:disabled {
-      opacity: .6;
-      cursor: not-allowed;
-    }
-
-    .progress {
-      height: 10px;
-      background: #020617;
-      border: 1px solid #1e293b;
-      border-radius: 999px;
-      margin-top: 18px;
-      overflow: hidden;
-    }
-
-    .bar {
-      height: 100%;
-      width: 0%;
-      background: linear-gradient(90deg, #22d3ee, #7c3aed);
-      transition: width .3s ease;
-    }
-
-    .counter {
-      margin-top: 10px;
-      font-size: 14px;
-      color: #cbd5f5;
-    }
-  </style>
+<style>
+body{
+  margin:0;
+  min-height:100vh;
+  background:radial-gradient(1200px 600px at 10% 0%, #0b1220, #020617);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+  color:#e5e7eb;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.card{
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:14px;
+  padding:24px;
+  width:460px;
+  box-shadow:0 30px 80px rgba(0,0,0,.55);
+}
+h2{margin:0 0 16px;font-size:20px}
+label{font-size:13px;color:#94a3b8}
+input{
+  width:100%;
+  margin:6px 0 14px;
+  padding:8px 10px;
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:8px;
+  color:#e5e7eb;
+}
+button{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  font-weight:600;
+  cursor:pointer;
+  margin-top:6px;
+}
+#startBtn{background:linear-gradient(135deg,#22d3ee,#7c3aed);color:#020617}
+#exportBtn{background:#1e293b;color:#e5e7eb;display:none}
+.progress{
+  height:10px;
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:999px;
+  margin-top:18px;
+  overflow:hidden;
+}
+.bar{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#22d3ee,#7c3aed);
+  transition:.3s;
+}
+.status{
+  margin-top:10px;
+  font-size:14px;
+  color:#cbd5f5;
+}
+</style>
 </head>
-<body>
 
+<body>
 <div class="card">
   <h2>Straight Freight – Orders Export</h2>
 
-  <label for="start">Start Date</label>
-  <input type="date" id="start" value="2021-12-01" />
+  <label>Start Date</label>
+  <input type="date" id="start" value="2021-12-01">
 
-  <label for="end">End Date</label>
-  <input type="date" id="end" value="2025-12-17" />
+  <label>End Date</label>
+  <input type="date" id="end" value="2025-12-17">
 
-  <button id="btn" onclick="startExport()">Start Export</button>
+  <button id="startBtn" onclick="runExport()">Start Pull</button>
 
-  <div class="progress">
-    <div class="bar" id="bar"></div>
-  </div>
+  <div class="progress"><div class="bar" id="bar"></div></div>
+  <div class="status" id="status">Waiting to start…</div>
 
-  <div class="counter" id="count">Orders pulled: 0</div>
+  <button id="exportBtn" onclick="exportCSV()">Export CSV</button>
 </div>
 
 <script>
-let jobId = null;
+let allOrders = [];
+let token = null;
 
-async function startExport() {
-  const startDate = document.getElementById("start").value;
-  const endDate   = document.getElementById("end").value;
-  const btn       = document.getElementById("btn");
-
-  if (!startDate || !endDate) {
-    alert("Start and End dates are required.");
-    return;
-  }
-
-  btn.disabled = true;
-  document.getElementById("count").textContent = "Orders pulled: 0";
-  document.getElementById("bar").style.width = "0%";
-
-  const res = await fetch(
-    `/api/start-job?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`
-  );
-
-  const json = await res.json();
-  if (!json.jobId) {
-    alert("Failed to start job.");
-    btn.disabled = false;
-    return;
-  }
-
-  jobId = json.jobId;
-  pollStatus();
+function fmt(d){
+  return `${String(d.getMonth()+1).padStart(2,"0")}/${String(d.getDate()).padStart(2,"0")}/${d.getFullYear()}`;
 }
 
-async function pollStatus() {
-  const res = await fetch(`/api/job-status?jobId=${jobId}`);
-  if (!res.ok) {
-    setTimeout(pollStatus, 1500);
-    return;
+async function runExport(){
+  allOrders = [];
+  document.getElementById("exportBtn").style.display="none";
+  document.getElementById("bar").style.width="0%";
+
+  const startDate = new Date(document.getElementById("start").value);
+  const endDate   = new Date(document.getElementById("end").value);
+
+  document.getElementById("status").textContent = "Logging in…";
+
+  const loginRes = await fetch("/api/login");
+  const loginJson = await loginRes.json();
+  token = loginJson.token;
+
+  let cur = new Date(startDate);
+  let totalWindows = Math.ceil((endDate - startDate) / (1000*60*60*24*30));
+  let windowIndex = 0;
+
+  while(cur <= endDate){
+    windowIndex++;
+
+    const chunkEnd = new Date(cur);
+    chunkEnd.setDate(chunkEnd.getDate() + 29);
+    if(chunkEnd > endDate) chunkEnd.setTime(endDate.getTime());
+
+    document.getElementById("status").textContent =
+      `Pulling ${fmt(cur)} → ${fmt(chunkEnd)} (Orders so far: ${allOrders.length})`;
+
+    const res = await fetch(
+      `/api/get-orders?from=${fmt(cur)}&to=${fmt(chunkEnd)}`,
+      { headers:{ Authorization:`Bearer ${token}` } }
+    );
+
+    const data = await res.json();
+    if(Array.isArray(data)) allOrders.push(...data);
+
+    document.getElementById("bar").style.width =
+      Math.min(windowIndex / totalWindows * 100, 100) + "%";
+
+    cur.setDate(chunkEnd.getDate() + 1);
+    await new Promise(r => setTimeout(r, 1200));
   }
 
-  const data = await res.json();
-  const count = data.count ?? 0;
+  document.getElementById("status").textContent =
+    `Complete — ${allOrders.length} orders found`;
 
-  document.getElementById("count").textContent =
-    `Orders pulled: ${count}`;
-
-  document.getElementById("bar").style.width =
-    Math.min(count / 5000 * 100, 100) + "%";
-
-  if (data.status === "running") {
-    setTimeout(pollStatus, 1500);
-  }
-
-  if (data.status === "done") {
-    const result = await fetch(`/api/job-result?jobId=${jobId}`);
-    const orders = await result.json();
-    exportCSV(orders);
-    document.getElementById("btn").disabled = false;
-  }
+  document.getElementById("exportBtn").style.display="block";
 }
 
-function exportCSV(data) {
-  if (!data.length) return;
-
-  const headers = Object.keys(data[0]);
-  const rows = data.map(o =>
+function exportCSV(){
+  if(!allOrders.length) return;
+  const headers = Object.keys(allOrders[0]);
+  const rows = allOrders.map(o =>
     headers.map(h => JSON.stringify(o[h] ?? "")).join(",")
   );
-
   const csv = [headers.join(","), ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-
+  const blob = new Blob([csv],{type:"text/csv"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = "straight_freight_orders.csv";
   a.click();
 }
 </script>
-
 </body>
 </html>
