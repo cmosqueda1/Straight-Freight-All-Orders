@@ -5,34 +5,79 @@ export default async function handler(req, res) {
     const { from, to } = req.query;
 
     if (!from || !to) {
-      return res.status(400).json({ error: "Missing from/to dates" });
+      return res.status(400).json({
+        error: "Missing required query params: from, to"
+      });
     }
 
-    // 🔍 DEBUG LOG — YOU SHOULD SEE DIFFERENT DATES EACH CALL
-    console.log("GET ORDERS:", from, "→", to);
+    // 🔎 Log so you can verify sequential ranges in Vercel logs
+    console.log(`GET-ORDERS invoked: ${from} → ${to}`);
 
-    const tokenRes = await fetch(`https://${req.headers.host}/api/login`);
-    const { token } = await tokenRes.json();
+    /* ======================================================
+       LOGIN (SAFE FOR VERCEL)
+    ====================================================== */
 
-    const apiRes = await fetch(
-      `https://straight-freight-api.example.com/orders?from=${from}&to=${to}`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+    const loginUrl = `https://${req.headers.host}/api/login`;
+
+    const loginRes = await fetch(loginUrl);
+
+    if (!loginRes.ok) {
+      const text = await loginRes.text();
+      throw new Error(`Login failed: ${loginRes.status} ${text}`);
+    }
+
+    const loginData = await loginRes.json();
+
+    if (!loginData.token) {
+      throw new Error("Login response missing token");
+    }
+
+    const token = loginData.token;
+
+    /* ======================================================
+       FETCH ORDERS (USE EXACT DATE RANGE PASSED IN)
+    ====================================================== */
+
+    const ordersApiUrl =
+      `https://straight-freight-api.example.com/orders` +
+      `?from=${encodeURIComponent(from)}` +
+      `&to=${encodeURIComponent(to)}`;
+
+    const ordersRes = await fetch(ordersApiUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json"
       }
-    );
+    });
 
-    const orders = await apiRes.json();
+    if (!ordersRes.ok) {
+      const text = await ordersRes.text();
+      throw new Error(`Orders API failed: ${ordersRes.status} ${text}`);
+    }
 
-    res.status(200).json({
+    const ordersData = await ordersRes.json();
+
+    const orders = Array.isArray(ordersData)
+      ? ordersData
+      : ordersData?.orders || [];
+
+    /* ======================================================
+       SUCCESS RESPONSE
+    ====================================================== */
+
+    return res.status(200).json({
       from,
       to,
-      orders: orders || []
+      count: orders.length,
+      orders
     });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Failed to fetch orders" });
+    console.error("GET-ORDERS ERROR:", err);
+
+    return res.status(500).json({
+      error: "Failed to fetch orders",
+      message: err.message
+    });
   }
 }
