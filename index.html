@@ -16,9 +16,7 @@
   --border:#1f2933;
   --ok:#10b981;
 }
-
 *{box-sizing:border-box}
-
 body{
   margin:0;
   min-height:100vh;
@@ -31,7 +29,6 @@ body{
   align-items:center;
   justify-content:center;
 }
-
 .card{
   width:460px;
   background:linear-gradient(180deg,#111827,#0b1220);
@@ -40,24 +37,8 @@ body{
   padding:26px;
   box-shadow:0 25px 60px rgba(0,0,0,.6);
 }
-
-h1{
-  margin:0 0 20px;
-  font-size:20px;
-}
-
-.field{
-  margin-bottom:16px;
-}
-
-label{
-  font-size:12px;
-  color:var(--muted);
-  display:block;
-  margin-bottom:6px;
-}
-
-/* DATE INPUT FIX */
+h1{margin:0 0 20px;font-size:20px}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
 input[type="date"]{
   width:100%;
   padding:12px 44px 12px 12px;
@@ -65,45 +46,23 @@ input[type="date"]{
   border:1px solid var(--border);
   background:#0b1220;
   color:var(--text);
-  font-size:14px;
-  cursor:pointer;
 }
-
 input[type="date"]::-webkit-calendar-picker-indicator{
   opacity:1;
   filter:invert(1);
-  cursor:pointer;
 }
-
 button{
   width:100%;
   padding:14px;
   border-radius:14px;
   border:none;
   font-weight:600;
-  font-size:14px;
   cursor:pointer;
   color:#fff;
 }
-
-.primary{
-  background:linear-gradient(90deg,var(--accent),var(--accent2));
-}
-
-.secondary{
-  background:linear-gradient(90deg,#334155,#475569);
-}
-
-button:disabled{
-  opacity:.6;
-  cursor:not-allowed;
-}
-
-.progress-wrap{
-  margin-top:18px;
-  display:none;
-}
-
+.primary{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+.secondary{background:linear-gradient(90deg,#334155,#475569)}
+.progress-wrap{margin-top:18px;display:none}
 .progress-bar{
   height:10px;
   background:#0b1220;
@@ -111,20 +70,13 @@ button:disabled{
   overflow:hidden;
   margin-top:8px;
 }
-
 .progress-fill{
   height:100%;
   width:0%;
   background:linear-gradient(90deg,var(--accent),var(--ok));
   transition:width .3s ease;
 }
-
-.status{
-  font-size:13px;
-  color:var(--muted);
-  min-height:20px;
-}
-
+.status{margin-top:10px;font-size:13px;color:var(--muted)}
 .spinner{
   display:inline-block;
   width:14px;
@@ -134,19 +86,9 @@ button:disabled{
   border-radius:50%;
   animation:spin 1s linear infinite;
   margin-right:6px;
-  vertical-align:middle;
 }
-
-@keyframes spin{
-  to{transform:rotate(360deg)}
-}
-
-.footer{
-  margin-top:16px;
-  font-size:13px;
-  color:var(--muted);
-  text-align:center;
-}
+@keyframes spin{to{transform:rotate(360deg)}}
+.footer{margin-top:14px;font-size:13px;color:var(--muted);text-align:center}
 </style>
 </head>
 
@@ -154,21 +96,19 @@ button:disabled{
 <div class="card">
   <h1>Straight Freight – Orders Export</h1>
 
-  <div class="field">
-    <label>Start Date</label>
-    <input type="date" id="startDate">
-  </div>
+  <label>Start Date</label>
+  <input type="date" id="startDate">
 
-  <div class="field">
-    <label>End Date</label>
-    <input type="date" id="endDate">
-  </div>
+  <label style="margin-top:12px">End Date</label>
+  <input type="date" id="endDate">
 
-  <button id="startBtn" class="primary">Start Pull</button>
+  <button id="startBtn" class="primary" style="margin-top:18px">
+    Start Pull
+  </button>
 
   <div class="progress-wrap" id="progressWrap">
     <div class="status" id="status">
-      <span class="spinner"></span>Initializing…
+      <span class="spinner"></span>Starting…
     </div>
     <div class="progress-bar">
       <div class="progress-fill" id="progressFill"></div>
@@ -183,12 +123,12 @@ button:disabled{
 </div>
 
 <script>
-/* =======================
-   CONFIG
-======================= */
-
+/* =====================
+   CSV COLUMN ORDER
+===================== */
 const CSV_COLUMNS = [
   "OrderTrackingID","TrackingKey","QuoteId","AltRefId","RouteNo","AccountNo",
+  "ClientRefNo","ClientRefNo2","ClientRefNo3","ClientRefNo4",
 
   "OrderStatus","OrderShipmentStatusCodes","oDate","PickupETA","DeliveryETA",
 
@@ -206,50 +146,38 @@ const CSV_COLUMNS = [
   "AfterHoursCharge","WaitTimeCharge","StopOffCharge","MiscCharge",
   "TotalExtras","TotalSurcharges","Subtotal","Tax1Amount","Tax2Amount","GrandTotal",
 
-  "ClientRefNo","ClientRefNo2","ClientRefNo3","ClientRefNo4",
-
   "SpecInstr","OrderSpecialInstructions","Comments",
   "Department","CallerName","Phone","Email",
 
   "LastGPS","CreditCard","HasPLI","HasDLI"
 ];
 
-/* =======================
-   STATE
-======================= */
-
+/* =====================
+   STATE / HELPERS
+===================== */
+const BATCH_SIZE = 5;
 let allOrders = [];
 let startTime = null;
 let timerInterval = null;
 
-/* =======================
-   HELPERS
-======================= */
-
-const addDays = (d, days) => {
+const parseLocal = v => {
+  const [y,m,d] = v.split("-").map(Number);
+  return new Date(y,m-1,d);
+};
+const addDays = (d,n) => {
   const x = new Date(d);
-  x.setDate(x.getDate() + days);
+  x.setDate(x.getDate()+n);
   return x;
 };
-
-const parseLocal = (v) => {
-  const [y,m,d] = v.split("-").map(Number);
-  return new Date(y, m-1, d);
+const fmt = d => d.toISOString().slice(0,10);
+const elapsed = () => {
+  const s = Math.floor((Date.now()-startTime)/1000);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 };
 
-const fmt = (d) => d.toISOString().slice(0,10);
-
-const formatElapsed = () => {
-  const sec = Math.floor((Date.now() - startTime) / 1000);
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2,"0")}`;
-};
-
-/* =======================
+/* =====================
    ELEMENTS
-======================= */
-
+===================== */
 const startBtn = document.getElementById("startBtn");
 const exportBtn = document.getElementById("exportBtn");
 const statusEl = document.getElementById("status");
@@ -257,78 +185,71 @@ const progressWrap = document.getElementById("progressWrap");
 const progressFill = document.getElementById("progressFill");
 const summaryEl = document.getElementById("summary");
 
-/* =======================
-   MAIN LOGIC
-======================= */
-
+/* =====================
+   MAIN
+===================== */
 startBtn.onclick = async () => {
-  const startVal = startDate.value;
-  const endVal = endDate.value;
-
-  if (!startVal || !endVal) {
-    alert("Please select both dates.");
-    return;
+  if (!startDate.value || !endDate.value) {
+    return alert("Select both dates");
   }
 
   startBtn.disabled = true;
   exportBtn.style.display = "none";
   progressWrap.style.display = "block";
   progressFill.style.width = "0%";
-  summaryEl.textContent = "";
   allOrders = [];
+  summaryEl.textContent = "";
 
   startTime = Date.now();
-
   timerInterval = setInterval(() => {
     statusEl.innerHTML =
       `<span class="spinner"></span>` +
-      `Running… Orders: ${allOrders.length} | Elapsed: ${formatElapsed()}`;
+      `Running… Orders: ${allOrders.length} | Elapsed: ${elapsed()}`;
   }, 1000);
 
-  let cursor = parseLocal(startVal);
-  const finalEnd = parseLocal(endVal);
+  let windows = [];
+  let cursor = parseLocal(startDate.value);
+  const end = parseLocal(endDate.value);
 
-  const totalDays =
-    Math.ceil((finalEnd - cursor) / 86400000) + 1;
+  while (cursor <= end) {
+    const from = new Date(cursor);
+    let to = addDays(from,29);
+    if (to > end) to = new Date(end);
+    windows.push({from:fmt(from), to:fmt(to)});
+    cursor = addDays(to,1);
+  }
 
-  let processedDays = 0;
+  let completed = 0;
 
-  while (cursor <= finalEnd) {
-    const batchStart = new Date(cursor);
-    let batchEnd = addDays(batchStart, 29);
-    if (batchEnd > finalEnd) batchEnd = new Date(finalEnd);
+  for (let i=0;i<windows.length;i+=BATCH_SIZE) {
+    const slice = windows.slice(i,i+BATCH_SIZE);
+    const results = await Promise.all(
+      slice.map(w =>
+        fetch(`/api/get-orders?from=${w.from}&to=${w.to}`)
+          .then(r => r.json())
+      )
+    );
 
-    const from = fmt(batchStart);
-    const to = fmt(batchEnd);
+    results.forEach(r => {
+      if (Array.isArray(r.orders)) allOrders.push(...r.orders);
+    });
 
-    const res = await fetch(`/api/get-orders?from=${from}&to=${to}`);
-    const data = await res.json();
-
-    if (Array.isArray(data.orders)) {
-      allOrders.push(...data.orders);
-    }
-
-    processedDays +=
-      Math.ceil((batchEnd - batchStart) / 86400000) + 1;
-
+    completed += slice.length;
     progressFill.style.width =
-      Math.min((processedDays / totalDays) * 100, 100) + "%";
-
-    cursor = addDays(batchEnd, 1);
+      Math.round((completed/windows.length)*100) + "%";
   }
 
   clearInterval(timerInterval);
-  statusEl.textContent = "Completed";
+  statusEl.textContent = `Completed in ${elapsed()}`;
   progressFill.style.width = "100%";
   summaryEl.textContent = `Completed. Total Orders: ${allOrders.length}`;
   exportBtn.style.display = "block";
   startBtn.disabled = false;
 };
 
-/* =======================
+/* =====================
    EXPORT
-======================= */
-
+===================== */
 exportBtn.onclick = () => {
   if (!allOrders.length) return;
 
@@ -348,7 +269,6 @@ exportBtn.onclick = () => {
   a.href = url;
   a.download = "straight_freight_orders.csv";
   a.click();
-
   URL.revokeObjectURL(url);
 };
 </script>
