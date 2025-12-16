@@ -1,17 +1,38 @@
-export default async function handler(req, res){
-  const { from, to } = req.query;
-  const BASE = "https://www.straightfreightsystems.com";
+import fetch from "node-fetch";
 
-  const r = await fetch(
-    `${BASE}/Axis/v3/Order/GetAllOrders?fromDate=${from}&toDate=${to}`,
-    {
-      headers:{
-        Accept:"application/json",
-        Authorization:req.headers.authorization
-      }
+export default async function handler(req, res) {
+  try {
+    const { from, to } = req.query;
+
+    if (!from || !to) {
+      return res.status(400).json({ error: "Missing from/to dates" });
     }
-  );
 
-  const data = await r.json();
-  res.json(data);
+    // 🔍 DEBUG LOG — YOU SHOULD SEE DIFFERENT DATES EACH CALL
+    console.log("GET ORDERS:", from, "→", to);
+
+    const tokenRes = await fetch(`${req.headers.origin}/api/login`);
+    const { token } = await tokenRes.json();
+
+    const apiRes = await fetch(
+      `https://straight-freight-api.example.com/orders?from=${from}&to=${to}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+
+    const orders = await apiRes.json();
+
+    res.status(200).json({
+      from,
+      to,
+      orders: orders || []
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch orders" });
+  }
 }
