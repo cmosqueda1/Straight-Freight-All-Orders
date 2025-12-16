@@ -94,7 +94,6 @@ button{
   margin-top:14px;
   font-size:13px;
   color:var(--muted);
-  text-align:left;
   max-height:160px;
   overflow:auto;
 }
@@ -141,6 +140,18 @@ button{
 const BATCH_SIZE = 5;
 const MAX_RETRIES = 2;
 
+const CSV_COLUMNS = [
+  "OrderTrackingID","TrackingKey","QuoteId","AltRefId","RouteNo","AccountNo",
+  "ClientRefNo","ClientRefNo2","ClientRefNo3","ClientRefNo4",
+  "OrderStatus","OrderShipmentStatusCodes","oDate","PickupETA","DeliveryETA",
+  "PickupAddress","PickupTargetFrom","PickupTargetTo",
+  "DeliveryAddress","DeliveryTargetFrom","DeliveryTargetTo",
+  "DriverId","DriverNo","DriverFirstName","DriverLastName",
+  "ShipmentWeight","DeclaredValue","CODAmount",
+  "OrderCharge","TotalExtras","TotalSurcharges","Subtotal","Tax1Amount","Tax2Amount","GrandTotal",
+  "Comments"
+];
+
 /* =====================
    STATE
 ===================== */
@@ -183,18 +194,15 @@ const summaryEl = document.getElementById("summary");
 ===================== */
 async function fetchWithRetry(from, to) {
   let attempts = 0;
-
   while (attempts <= MAX_RETRIES) {
     try {
       const res = await fetch(`/api/get-orders?from=${from}&to=${to}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       return { success:true, attempts, data };
-    } catch (err) {
+    } catch {
       attempts++;
-      if (attempts > MAX_RETRIES) {
-        return { success:false, attempts };
-      }
+      if (attempts > MAX_RETRIES) return { success:false, attempts };
       await sleep(750);
     }
   }
@@ -239,26 +247,19 @@ startBtn.onclick = async () => {
 
   for (let i=0;i<windows.length;i+=BATCH_SIZE) {
     const slice = windows.slice(i,i+BATCH_SIZE);
-
     const results = await Promise.all(
       slice.map(w => fetchWithRetry(w.from, w.to))
     );
 
     results.forEach((r, idx) => {
       const w = slice[idx];
-      if (r.success) {
-        if (Array.isArray(r.data.orders)) {
-          allOrders.push(...r.data.orders);
-        }
+      if (r.success && Array.isArray(r.data.orders)) {
+        allOrders.push(...r.data.orders);
         if (r.attempts > 0) {
-          failureLog.push(
-            `${w.from} → ${w.to} failed – retried ${r.attempts} times – successful`
-          );
+          failureLog.push(`${w.from} → ${w.to} retried ${r.attempts}x – success`);
         }
       } else {
-        failureLog.push(
-          `${w.from} → ${w.to} failed – retried ${MAX_RETRIES} times – failed`
-        );
+        failureLog.push(`${w.from} → ${w.to} retried ${MAX_RETRIES}x – FAILED`);
       }
     });
 
@@ -270,19 +271,41 @@ startBtn.onclick = async () => {
   clearInterval(timerInterval);
   statusEl.textContent = `Completed in ${elapsed()}`;
   progressFill.style.width = "100%";
+  summaryEl.innerHTML =
+    failureLog.length === 0
+      ? `<div class="ok">Completed. Total Orders: ${allOrders.length}. 0 failures.</div>`
+      : `<div class="warn">Completed. Total Orders: ${allOrders.length}.</div>` +
+        failureLog.map(f =>
+          `<div class="${f.includes("FAILED") ? "bad" : "warn"}">${f}</div>`
+        ).join("");
+
   exportBtn.style.display = "block";
   startBtn.disabled = false;
+};
 
-  if (failureLog.length === 0) {
-    summaryEl.innerHTML =
-      `<div class="ok">Completed. Total Orders: ${allOrders.length}. 0 failures.</div>`;
-  } else {
-    summaryEl.innerHTML =
-      `<div class="warn">Completed. Total Orders: ${allOrders.length}.</div>` +
-      failureLog.map(f =>
-        `<div class="${f.endsWith("failed") ? "bad" : "warn"}">${f}</div>`
-      ).join("");
-  }
+/* =====================
+   EXPORT (FIXED)
+===================== */
+exportBtn.onclick = () => {
+  if (!allOrders.length) return;
+
+  const rows = [
+    CSV_COLUMNS.join(","),
+    ...allOrders.map(o =>
+      CSV_COLUMNS.map(c =>
+        `"${String(o?.[c] ?? "").replace(/"/g,'""')}"`
+      ).join(",")
+    )
+  ];
+
+  const blob = new Blob([rows.join("\n")], { type:"text/csv" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "straight_freight_orders.csv";
+  a.click();
+  URL.revokeObjectURL(url);
 };
 </script>
 </body>
