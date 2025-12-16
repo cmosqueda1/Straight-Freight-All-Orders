@@ -33,21 +33,21 @@ body{
 }
 
 .card{
-  width:440px;
+  width:460px;
   background:linear-gradient(180deg,#111827,#0b1220);
   border:1px solid var(--border);
   border-radius:20px;
-  padding:24px;
+  padding:26px;
   box-shadow:0 25px 60px rgba(0,0,0,.6);
 }
 
 h1{
-  margin:0 0 18px;
+  margin:0 0 20px;
   font-size:20px;
 }
 
 .field{
-  margin-bottom:14px;
+  margin-bottom:16px;
 }
 
 label{
@@ -57,14 +57,21 @@ label{
   margin-bottom:6px;
 }
 
+/* DATE INPUT FIX */
 input[type="date"]{
   width:100%;
-  padding:12px;
+  padding:12px 44px 12px 12px;
   border-radius:12px;
   border:1px solid var(--border);
   background:#0b1220;
   color:var(--text);
   font-size:14px;
+  cursor:pointer;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator{
+  opacity:1;
+  filter:invert(1);
   cursor:pointer;
 }
 
@@ -94,6 +101,7 @@ button:disabled{
 
 .progress-wrap{
   margin-top:18px;
+  display:none;
 }
 
 .progress-bar{
@@ -112,10 +120,9 @@ button:disabled{
 }
 
 .status{
-  margin-top:10px;
   font-size:13px;
   color:var(--muted);
-  min-height:18px;
+  min-height:20px;
 }
 
 .spinner{
@@ -149,17 +156,17 @@ button:disabled{
 
   <div class="field">
     <label>Start Date</label>
-    <input type="date" id="startDate" />
+    <input type="date" id="startDate">
   </div>
 
   <div class="field">
     <label>End Date</label>
-    <input type="date" id="endDate" />
+    <input type="date" id="endDate">
   </div>
 
   <button id="startBtn" class="primary">Start Pull</button>
 
-  <div class="progress-wrap" id="progressWrap" style="display:none">
+  <div class="progress-wrap" id="progressWrap">
     <div class="status" id="status">
       <span class="spinner"></span>Initializing…
     </div>
@@ -176,15 +183,48 @@ button:disabled{
 </div>
 
 <script>
-const startBtn = document.getElementById("startBtn");
-const exportBtn = document.getElementById("exportBtn");
-const statusEl = document.getElementById("status");
-const progressWrap = document.getElementById("progressWrap");
-const progressFill = document.getElementById("progressFill");
-const summaryEl = document.getElementById("summary");
+/* =======================
+   CONFIG
+======================= */
+
+const CSV_COLUMNS = [
+  "OrderTrackingID","TrackingKey","QuoteId","AltRefId","RouteNo","AccountNo",
+
+  "OrderStatus","OrderShipmentStatusCodes","oDate","PickupETA","DeliveryETA",
+
+  "PickupAddress","PickupTargetFrom","PickupTargetTo",
+  "PickupArrival","PickupDeparture","POPname","HasPOPsignature",
+
+  "DeliveryAddress","DeliveryTargetFrom","DeliveryTargetTo",
+  "DeliveryArrival","DeliveryDeparture","PODname","HasPODsignature",
+
+  "DriverId","DriverNo","DriverFirstName","DriverLastName","Vehicle","VehiclePic",
+
+  "ShipmentWeight","OrderPackages","OrderPackageItems","DeclaredValue","CODAmount",
+
+  "OrderCharge","PackageCharge","WeightCharge","DeclaredValueCharge","CODCharge",
+  "AfterHoursCharge","WaitTimeCharge","StopOffCharge","MiscCharge",
+  "TotalExtras","TotalSurcharges","Subtotal","Tax1Amount","Tax2Amount","GrandTotal",
+
+  "ClientRefNo","ClientRefNo2","ClientRefNo3","ClientRefNo4",
+
+  "SpecInstr","OrderSpecialInstructions","Comments",
+  "Department","CallerName","Phone","Email",
+
+  "LastGPS","CreditCard","HasPLI","HasDLI"
+];
+
+/* =======================
+   STATE
+======================= */
 
 let allOrders = [];
 let startTime = null;
+let timerInterval = null;
+
+/* =======================
+   HELPERS
+======================= */
 
 const addDays = (d, days) => {
   const x = new Date(d);
@@ -199,16 +239,31 @@ const parseLocal = (v) => {
 
 const fmt = (d) => d.toISOString().slice(0,10);
 
-const elapsed = () => {
-  const s = Math.floor((Date.now() - startTime) / 1000);
-  const m = Math.floor(s / 60);
-  const r = s % 60;
-  return `${m}m ${r}s`;
+const formatElapsed = () => {
+  const sec = Math.floor((Date.now() - startTime) / 1000);
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2,"0")}`;
 };
 
+/* =======================
+   ELEMENTS
+======================= */
+
+const startBtn = document.getElementById("startBtn");
+const exportBtn = document.getElementById("exportBtn");
+const statusEl = document.getElementById("status");
+const progressWrap = document.getElementById("progressWrap");
+const progressFill = document.getElementById("progressFill");
+const summaryEl = document.getElementById("summary");
+
+/* =======================
+   MAIN LOGIC
+======================= */
+
 startBtn.onclick = async () => {
-  const startVal = document.getElementById("startDate").value;
-  const endVal = document.getElementById("endDate").value;
+  const startVal = startDate.value;
+  const endVal = endDate.value;
 
   if (!startVal || !endVal) {
     alert("Please select both dates.");
@@ -217,17 +272,24 @@ startBtn.onclick = async () => {
 
   startBtn.disabled = true;
   exportBtn.style.display = "none";
-  summaryEl.textContent = "";
   progressWrap.style.display = "block";
   progressFill.style.width = "0%";
+  summaryEl.textContent = "";
   allOrders = [];
+
   startTime = Date.now();
+
+  timerInterval = setInterval(() => {
+    statusEl.innerHTML =
+      `<span class="spinner"></span>` +
+      `Running… Orders: ${allOrders.length} | Elapsed: ${formatElapsed()}`;
+  }, 1000);
 
   let cursor = parseLocal(startVal);
   const finalEnd = parseLocal(endVal);
 
   const totalDays =
-    Math.ceil((finalEnd - cursor) / (1000 * 60 * 60 * 24)) + 1;
+    Math.ceil((finalEnd - cursor) / 86400000) + 1;
 
   let processedDays = 0;
 
@@ -239,10 +301,6 @@ startBtn.onclick = async () => {
     const from = fmt(batchStart);
     const to = fmt(batchEnd);
 
-    statusEl.innerHTML =
-      `<span class="spinner"></span>` +
-      `Pulling ${from} → ${to} | Orders: ${allOrders.length} | Elapsed: ${elapsed()}`;
-
     const res = await fetch(`/api/get-orders?from=${from}&to=${to}`);
     const data = await res.json();
 
@@ -251,7 +309,7 @@ startBtn.onclick = async () => {
     }
 
     processedDays +=
-      Math.ceil((batchEnd - batchStart) / (1000 * 60 * 60 * 24)) + 1;
+      Math.ceil((batchEnd - batchStart) / 86400000) + 1;
 
     progressFill.style.width =
       Math.min((processedDays / totalDays) * 100, 100) + "%";
@@ -259,6 +317,7 @@ startBtn.onclick = async () => {
     cursor = addDays(batchEnd, 1);
   }
 
+  clearInterval(timerInterval);
   statusEl.textContent = "Completed";
   progressFill.style.width = "100%";
   summaryEl.textContent = `Completed. Total Orders: ${allOrders.length}`;
@@ -266,15 +325,18 @@ startBtn.onclick = async () => {
   startBtn.disabled = false;
 };
 
+/* =======================
+   EXPORT
+======================= */
+
 exportBtn.onclick = () => {
   if (!allOrders.length) return;
 
-  const headers = Object.keys(allOrders[0]);
   const rows = [
-    headers.join(","),
+    CSV_COLUMNS.join(","),
     ...allOrders.map(o =>
-      headers.map(h =>
-        `"${String(o[h] ?? "").replace(/"/g,'""')}"`
+      CSV_COLUMNS.map(c =>
+        `"${String(o?.[c] ?? "").replace(/"/g,'""')}"`
       ).join(",")
     )
   ];
