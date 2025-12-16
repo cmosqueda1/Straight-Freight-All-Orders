@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Straight Freight – Orders Export</title>
+</head>
+<body>
+
+<h2>Straight Freight – Orders Export</h2>
+
+<label>Start Date</label><br />
+<input type="date" id="start" value="2021-12-01"><br><br>
+
+<label>End Date</label><br />
+<input type="date" id="end" value="2025-12-17"><br><br>
+
+<button onclick="run()">Fetch & Export CSV</button>
+
+<pre id="log"></pre>
+
+<script>
+const log = msg => document.getElementById("log").textContent += msg + "\n";
+
+async function run() {
+  log("Fetching orders...");
+  const start = document.getElementById("start").value;
+  const end = document.getElementById("end").value;
+
+  const res = await fetch(`/api/orders?startDate=${start}&endDate=${end}`);
+  const data = await res.json();
+
+  log(`Orders received: ${data.length}`);
+  exportCSV(data);
+}
+
+function exportCSV(data) {
+  const headers = Object.keys(data[0]);
+  const rows = data.map(o =>
+    headers.map(h => JSON.stringify(o[h] ?? "")).join(",")
+  );
+
+  const csv = [headers.join(","), ...rows].join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "straight_freight_orders.csv";
+  a.click();
+}
+</script>
+
+</body>
+</html>
