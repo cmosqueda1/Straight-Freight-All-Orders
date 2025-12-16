@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     // 🔍 DEBUG LOG — YOU SHOULD SEE DIFFERENT DATES EACH CALL
     console.log("GET ORDERS:", from, "→", to);
 
-    const tokenRes = await fetch(`${req.headers.origin}/api/login`);
+    const tokenRes = await fetch(`https://${req.headers.host}/api/login`);
     const { token } = await tokenRes.json();
 
     const apiRes = await fetch(
