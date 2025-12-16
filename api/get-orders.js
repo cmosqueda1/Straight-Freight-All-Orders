@@ -8,42 +8,50 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log(`GET-ORDERS: ${from} → ${to}`);
+    // Convert YYYY-MM-DD → MM/DD/YYYY
+    const toMDY = (iso) => {
+      const [y, m, d] = iso.split("-");
+      return `${m}/${d}/${y}`;
+    };
+
+    const fromDate = toMDY(from);
+    const toDate = toMDY(to);
+
+    console.log(`GET-ORDERS ${fromDate} → ${toDate}`);
 
     /* ======================================================
-       LOGIN (CALL LOCAL API SAFELY)
+       LOGIN (reuse existing login.js)
     ====================================================== */
 
-    const loginUrl = `https://${req.headers.host}/api/login`;
-
-    const loginRes = await fetch(loginUrl);
+    const loginRes = await fetch(
+      `https://${req.headers.host}/api/login`
+    );
 
     if (!loginRes.ok) {
       const text = await loginRes.text();
       throw new Error(`Login failed: ${loginRes.status} ${text}`);
     }
 
-    const loginData = await loginRes.json();
+    const { token } = await loginRes.json();
 
-    if (!loginData.token) {
-      throw new Error("Login response missing token");
+    if (!token) {
+      throw new Error("Login did not return token");
     }
 
-    const token = loginData.token;
-
     /* ======================================================
-       FETCH ORDERS (EXACT DATE RANGE)
+       GET ALL ORDERS (Straight Freight Axis API)
     ====================================================== */
 
     const ordersUrl =
-      `https://straight-freight-api.example.com/orders` +
-      `?from=${encodeURIComponent(from)}` +
-      `&to=${encodeURIComponent(to)}`;
+      `https://www.straightfreightsystems.com/Axis/v3/Order/GetAllOrders` +
+      `?fromDate=${encodeURIComponent(fromDate)}` +
+      `&toDate=${encodeURIComponent(toDate)}`;
 
     const ordersRes = await fetch(ordersUrl, {
+      method: "GET",
       headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json"
+        "Accept": "application/json",
+        "Authorization": `Bearer ${token}`
       }
     });
 
@@ -52,16 +60,12 @@ export default async function handler(req, res) {
       throw new Error(`Orders API failed: ${ordersRes.status} ${text}`);
     }
 
-    const ordersData = await ordersRes.json();
-
-    const orders = Array.isArray(ordersData)
-      ? ordersData
-      : ordersData?.orders || [];
+    const orders = await ordersRes.json();
 
     return res.status(200).json({
-      from,
-      to,
-      count: orders.length,
+      from: fromDate,
+      to: toDate,
+      count: Array.isArray(orders) ? orders.length : 0,
       orders
     });
 
